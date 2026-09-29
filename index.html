@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zodi 87.9 FM</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; }
+    body {
+        background: linear-gradient(135deg, #0a0c14 0%, #161b33 100%);
+        min-height: 100vh; display: flex; justify-content: center;
+        align-items: center; color: #fff; padding: 20px;
+    }
+    .card {
+        background: linear-gradient(145deg, rgba(30,35,60,.6), rgba(15,18,32,.8));
+        border: 1px solid rgba(255,255,255,.08); border-radius: 24px;
+        padding: 30px; width: 420px; max-width: 100%;
+        box-shadow: 0 20px 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.1);
+        backdrop-filter: blur(14px); text-align: center;
+    }
+    .view { display: none; width: 100%; justify-content: center; }
+    .view.active { display: flex; }
+
+    .logo-title h1 {
+        font-size: 38px; font-weight: 800; letter-spacing: 2px; cursor: pointer;
+        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 4px; user-select: none;
+    }
+    .logo-title .dial { font-size: 17px; font-weight: 700; color: #00f2fe; letter-spacing: 3px; margin-bottom: 6px; }
+    .logo-title p { font-size: 13px; color: #9ca3af; margin-bottom: 25px; }
+
+    .badge {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px;
+        background: rgba(255,255,255,.06); color: #64748b;
+        border: 1px solid rgba(255,255,255,.1);
+    }
+    .badge.live { background: rgba(239,68,68,.15); color: #ef4444; border-color: rgba(239,68,68,.4); }
+    .dot { width: 7px; height: 7px; background: currentColor; border-radius: 50%; box-shadow: 0 0 8px currentColor; animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100% { transform: scale(.95); opacity:.8; } 50% { transform: scale(1.25); opacity:1; } }
+
+    .visualizer { display: flex; justify-content: center; align-items: center; gap: 4px; height: 35px; margin-bottom: 25px; }
+    .bar { width: 4px; height: 10px; background: rgba(255,255,255,.15); border-radius: 2px; }
+    .playing .bar { animation: bounce 1.2s infinite ease-in-out; }
+    .playing .bar:nth-child(1){animation-delay:.1s} .playing .bar:nth-child(2){animation-delay:.3s}
+    .playing .bar:nth-child(3){animation-delay:.2s} .playing .bar:nth-child(4){animation-delay:.4s}
+    .playing .bar:nth-child(5){animation-delay:.1s}
+    @keyframes bounce { 0%,100%{height:8px;background:rgba(0,242,254,.4)} 50%{height:28px;background:#00f2fe;box-shadow:0 0 10px #00f2fe} }
+
+    .play-btn {
+        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        border: none; width: 80px; height: 80px; border-radius: 50%; cursor: pointer;
+        display: flex; justify-content: center; align-items: center; margin: 0 auto 20px auto;
+        box-shadow: 0 0 20px rgba(0,242,254,.4); transition: all .3s ease;
+    }
+    .play-btn:hover { transform: scale(1.08); box-shadow: 0 0 28px rgba(0,242,254,.7); }
+    .play-icon { width: 0; height: 0; border-style: solid; border-width: 13px 0 13px 21px; border-color: transparent transparent transparent #0d0f18; margin-left: 4px; }
+    .playing-state .play-icon { border-style: double; border-width: 0 0 0 16px; margin-left: 0; }
+
+    .btn {
+        background: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+        color: #0d0f18; border: none; padding: 13px 18px; border-radius: 14px;
+        font-weight: 700; font-size: 14px; cursor: pointer; width: 100%;
+        box-shadow: 0 4px 15px rgba(0,242,254,.3); transition: all .2s; margin-bottom: 10px;
+    }
+    .btn:hover { transform: translateY(-2px); }
+    .btn:disabled { background: rgba(255,255,255,.06); color: #64748b; cursor: not-allowed; box-shadow: none; }
+    .btn.small { padding: 10px 12px; font-size: 13px; margin-bottom: 0; }
+    .btn.green { background: linear-gradient(135deg, #22c55e 0%, #15803d 100%); color: #fff; box-shadow: 0 4px 15px rgba(34,197,94,.3); }
+    .btn.blue { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #fff; box-shadow: 0 4px 15px rgba(59,130,246,.3); }
+
+    .input-field {
+        width: 100%; background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1);
+        border-radius: 14px; padding: 14px 18px; color: #fff; font-size: 18px;
+        text-align: center; letter-spacing: 6px; outline: none; margin-bottom: 15px;
+    }
+    .input-field:focus { border-color: #00f2fe; box-shadow: 0 0 10px rgba(0,242,254,.3); }
+    .error-msg { color: #ff3366; font-size: 12px; margin-top: 8px; display: none; }
+
+    .mic-btn {
+        background: linear-gradient(135deg, #22c55e 0%, #15803d 100%);
+        border: none; width: 80px; height: 80px; border-radius: 50%; cursor: pointer;
+        font-size: 34px; margin: 5px auto 10px auto; display: flex; justify-content: center; align-items: center;
+        box-shadow: 0 0 20px rgba(34,197,94,.4); transition: all .3s ease;
+    }
+    .mic-btn.talking { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); box-shadow: 0 0 30px rgba(239,68,68,.7); animation: pulse 1.2s infinite; }
+    .mic-label { font-size: 13px; color: #9ca3af; margin-bottom: 15px; }
+
+    .deck {
+        background: rgba(0,0,0,.25); border: 1px solid rgba(255,255,255,.08);
+        border-radius: 16px; padding: 14px; margin-bottom: 12px; text-align: left;
+    }
+    .deck-title { font-size: 12px; font-weight: 700; color: #00f2fe; letter-spacing: 1px; margin-bottom: 8px; text-transform: uppercase; }
+    .song-box {
+        background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.05);
+        border-radius: 10px; padding: 10px; margin-bottom: 10px;
+        font-size: 12px; color: #9ca3af; min-height: 44px; word-break: break-all;
+    }
+    .song-box .song-name { color: #fff; font-weight: 600; }
+    .row { display: flex; gap: 8px; }
+    .row .btn { flex: 1; }
+    .section-title { font-size: 12px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin: 16px 0 8px 0; }
+
+    .xfader-box { padding: 4px 10px 0 10px; margin-bottom: 10px; }
+    .xfader-box label { font-size: 11px; color: #64748b; display: block; margin-bottom: 4px; }
+    .xfader {
+        -webkit-appearance: none; width: 100%; height: 5px; border-radius: 3px;
+        background: linear-gradient(90deg, #22c55e, #4facfe, #3b82f6); outline: none;
+    }
+    .xfader::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+        background: #fff; cursor: pointer; box-shadow: 0 0 8px rgba(255,255,255,.6);
+    }
+    .xfader-marks { display: flex; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 2px; }
+
+    audio { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ============ VISTA 1: PAGINA DE INICIO (OYENTE) ============ -->
+<div id="listenerView" class="view active">
+    <div class="card">
+        <div class="logo-title" style="margin-top:10px;">
+            <h1 id="logoTitle">ZODI</h1>
+            <div class="dial">87.9 FM</div>
+            <p>Apretá play y escuchá la radio en vivo</p>
+        </div>
+        <div class="visualizer" id="visualizer">
+            <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+        </div>
+        <button class="play-btn" id="listenBtn"><div class="play-icon"></div></button>
+    </div>
+</div>
+
+<!-- ============ VISTA 2: CLAVE DE ACCESO ============ -->
+<div id="loginView" class="view">
+    <div class="card">
+        <div class="logo-title">
+            <h1>ZODI</h1>
+            <div class="dial">87.9 FM</div>
+            <p>Acceso para locutor</p>
+        </div>
+        <input type="password" id="passwordInput" class="input-field" placeholder="••••" maxlength="4" inputmode="numeric">
+        <button id="loginBtn" class="btn">Entrar a la Consola</button>
+        <p id="errorMsg" class="error-msg">Clave incorrecta</p>
+        <button id="backBtn" class="btn small" style="background:rgba(255,255,255,.06);color:#9ca3af;box-shadow:none;">← Volver</button>
+    </div>
+</div>
+
+<!-- ============ VISTA 3: CONSOLA DEL LOCUTOR ============ -->
+<div id="consoleView" class="view">
+    <div class="card">
+        <div class="badge live" id="onAirBadge"><span class="dot"></span><span id="onAirText">87.9 FM — AL AIRE — 0 conectados</span></div>
+
+        <div class="logo-title">
+            <h1 style="font-size:30px;">ZODI</h1>
+            <div class="dial">87.9 FM</div>
+        </div>
+
+        <div class="section-title" style="margin-top:0;">🎙️ Micrófono</div>
+        <button class="mic-btn" id="micBtn">🎙️</button>
+        <p class="mic-label" id="micLabel">Apretá el 🎙️ para activar el micrófono</p>
+
+        <div class="deck">
+            <div class="deck-title">🎵 Reproductor A</div>
+            <div class="song-box" id="boxA"><span class="song-name">Sin canciones</span> — tocá ELEGIR</div>
+            <input type="file" id="fileInputA" accept="audio/*" multiple style="display:none;">
+            <div class="row">
+                <button class="btn small green" id="pickBtnA">📁 Elegir</button>
+                <button class="btn small" id="playBtnA" disabled>▶️</button>
+                <button class="btn small" id="nextBtnA" disabled>⏭️</button>
+            </div>
+        </div>
+
+        <div class="xfader-box">
+            <label>🎚️ Mezcla A ⇄ B</label>
+            <input type="range" min="-1" max="1" step="0.01" value="0" class="xfader" id="xfader">
+            <div class="xfader-marks"><span>A</span><span>MITAD</span><span>B</span></div>
+        </div>
+
+        <div class="deck">
+            <div class="deck-title">🎵 Reproductor B</div>
+            <div class="song-box" id="boxB"><span class="song-name">Sin canciones</span> — tocá ELEGIR</div>
+            <input type="file" id="fileInputB" accept="audio/*" multiple style="display:none;">
+            <div class="row">
+                <button class="btn small blue" id="pickBtnB">📁 Elegir</button>
+                <button class="btn small" id="playBtnB" disabled>▶️</button>
+                <button class="btn small" id="nextBtnB" disabled>⏭️</button>
+            </div>
+        </div>
+
+        <button class="btn small" id="stopBroadcastBtn" style="background:rgba(255,255,255,.06);color:#9ca3af;box-shadow:none;margin-top:6px;">Desconectar</button>
+    </div>
+</div>
+
+<audio id="remoteAudio" autoplay></audio>
+
+<script>
+// ============================================================
+//  ZODI 87.9 FM — transmisión P2P (sin servidor propio)
+//  Usa PeerJS (red gratuita de conexión) para unir locutor y oyentes
+// ============================================================
+// Cabina unica para ESTE sitio (para que nadie mas choque con tu radio)
+function hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0; } return Math.abs(h); }
+const BROADCASTER_ID = 'zodi879-cabina-' + hashStr(location.hostname);
+
+let myRole = null;               // 'listener' o 'broadcaster'
+let peer = null;
+const peers = new Map();         // id -> RTCPeerConnection
+const conns = new Map();         // id -> DataConnection (señalización)
+let listenerConn = null;         // conexión de datos del lado oyente
+
+// STUN + TURN gratis: hace que la conexion funcione incluso entre
+// distintas redes de datos moviles (sin esto, muchas veces no se escucha nada)
+const rtcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
+    ]
+};
+const $ = id => document.getElementById(id);
+
+function showView(name) {
+    ['listenerView','loginView','consoleView'].forEach(v => $(v).classList.toggle('active', v === name));
+}
+
+// ===== Señalización por PeerJS =====
+function sendSignal(toId, data) {
+    if (myRole === 'broadcaster') {
+        const c = conns.get(toId);
+        if (c && c.open) c.send(data);
+    } else {
+        if (listenerConn && listenerConn.open) listenerConn.send(data);
+    }
+}
+
+// ============================================================
+//  OYENTE
+// ============================================================
+let listening = false;
+let retryTimer = null;
+
+function joinAsListener() {
+    myRole = 'listener';
+    try { peer = new Peer(); } catch(e) { $('liveText').textContent = 'ERROR DE CONEXIÓN'; return; }
+
+    peer.on('open', () => connectToBroadcaster());
+    peer.on('error', (err) => {
+        if (err.type === 'peer-unavailable') {
+            markOffline('FUERA DEL AIRE — el locutor no está conectado');
+            clearTimeout(retryTimer);
+            retryTimer = setTimeout(() => { if (myRole === 'listener') connectToBroadcaster(); }, 5000);
+        }
+    });
+}
+
+function markOffline(text) {
+    const b = $('liveBadge'); if (b) b.classList.remove('live');
+    const t = $('liveText'); if (t) t.textContent = text;
+}
+
+function markLive() {
+    const b = $('liveBadge'); if (b) b.classList.add('live');
+    const t = $('liveText'); if (t) t.textContent = 'EN VIVO 🔴';
+}
+
+function connectToBroadcaster() {
+    if (myRole !== 'listener') return;
+    const t = $('liveText'); if (t) t.textContent = 'CONECTANDO...';
+    const conn = peer.connect(BROADCASTER_ID, { reliable: true });
+    conn.on('open', () => { listenerConn = conn; });
+    conn.on('data', (msg) => handleSignal('broadcaster', msg));
+    conn.on('close', () => {
+        markOffline('FUERA DEL AIRE — se cortó la conexión');
+        const pc = peers.get('broadcaster'); if (pc) { pc.close(); peers.delete('broadcaster'); }
+        clearTimeout(retryTimer);
+        retryTimer = setTimeout(() => { if (myRole === 'listener') connectToBroadcaster(); }, 5000);
+    });
+}
+
+$('listenBtn').addEventListener('click', () => {
+    listening = !listening;
+    const audio = $('remoteAudio');
+    if (listening) {
+        audio.play().then(() => {
+            if (audio.srcObject) markLive();   // suena y hay señal del locutor
+        }).catch(() => {});
+        $('listenBtn').classList.add('playing-state');
+        $('visualizer').classList.add('playing');
+    } else {
+        audio.pause();
+        $('listenBtn').classList.remove('playing-state');
+        $('visualizer').classList.remove('playing');
+    }
+});
+
+// ============================================================
+//  ACCESO SECRETO: tocar "ZODI" 5 VECES + clave 1212
+// ============================================================
+let tapCount = 0, tapTimer = null;
+$('logoTitle').addEventListener('click', () => {
+    if (myRole === 'broadcaster') return;
+    tapCount++;
+    clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => { tapCount = 0; }, 2500);
+    if (tapCount >= 5) { tapCount = 0; showView('loginView'); }
+});
+
+$('backBtn').addEventListener('click', () => showView('listenerView'));
+$('loginBtn').addEventListener('click', tryLogin);
+$('passwordInput').addEventListener('keypress', e => { if (e.key === 'Enter') tryLogin(); });
+
+function tryLogin() {
+    if ($('passwordInput').value === '1212') {
+        $('errorMsg').style.display = 'none';
+        startBroadcaster();
+    } else {
+        $('errorMsg').style.display = 'block';
+        $('passwordInput').value = '';
+        $('passwordInput').focus();
+    }
+}
+
+// ============================================================
+//  LOCUTOR
+// ============================================================
+let micStream = null, micSourceNode = null;
+let audioCtx = null, mixDest = null;
+let isTalking = false;
+
+function startBroadcaster() {
+    myRole = 'broadcaster';
+
+    // Mezclador de audio: TODO (voz + música A + música B) pasa por acá
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    mixDest = audioCtx.createMediaStreamDestination();
+    audioCtx.resume();
+
+    // Abrir mi "cabina" en la red P2P
+    try { peer = new Peer(BROADCASTER_ID); } catch(e) {}
+
+    peer.on('open', () => {
+        updateListenersCount();
+    });
+    peer.on('error', (err) => {
+        if (err.type === 'unavailable-id') {
+            $('onAirText').textContent = '⚠️ YA HAY UN LOCUTOR EN EL AIRE';
+        }
+    });
+
+    // Cuando un oyente se conecta a mi cabina
+    peer.on('connection', (conn) => {
+        conn.on('open', () => {
+            conns.set(conn.peer, conn);
+            createPeer(conn.peer, true); // yo inicio la oferta de audio
+            updateListenersCount();
+        });
+        conn.on('data', (msg) => handleSignal(conn.peer, msg));
+        conn.on('close', () => {
+            conns.delete(conn.peer);
+            const pc = peers.get(conn.peer);
+            if (pc) { pc.close(); peers.delete(conn.peer); }
+            updateListenersCount();
+        });
+    });
+
+    showView('consoleView');
+}
+
+function updateListenersCount() {
+    const n = peers.size;
+    $('onAirText').textContent = `87.9 FM — AL AIRE — ${n} conectado(s) 🔴`;
+}
+
+// ---- MICRÓFONO ----
+$('micBtn').addEventListener('click', async () => {
+    if (!micStream) {
+        $('micLabel').textContent = 'Pidiendo permiso del micrófono...';
+        try {
+            micStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+            micStream.getAudioTracks().forEach(t => t.enabled = false);
+            // Enchufar el mic al mezclador: lo que hable pasa a TODOS al instante
+            micSourceNode = audioCtx.createMediaStreamSource(micStream);
+            micSourceNode.connect(mixDest);
+            $('micLabel').textContent = 'Micrófono listo — apretá para hablar al aire';
+        } catch (err) {
+            $('micLabel').textContent = 'Apretá el 🎙️ para activar el micrófono';
+            alert('No se pudo acceder al micrófono.\n\nAbrí la página EN UNA PESTAÑA NUEVA (no dentro de un recuadro embebido) y aceptá el permiso.');
+        }
+        return;
+    }
+    isTalking = !isTalking;
+    micStream.getAudioTracks().forEach(t => t.enabled = isTalking);
+    $('micBtn').classList.toggle('talking', isTalking);
+    $('micLabel').textContent = isTalking ? '🔴 ESTÁS AL AIRE — hablá ahora' : 'Apretá para hablar al aire';
+});
+
+// ---- REPRODUCTORES A y B ----
+function makeDeck(letter) {
+    return { letter, el: null, gainNode: null, localGain: null,
+             files: [], index: 0, playing: false, playBtnId: 'playBtn' + letter };
+}
+const deckA = makeDeck('A');
+const deckB = makeDeck('B');
+
+function setupDeck(deck, fileInputId, pickBtnId, playBtnId, nextBtnId, boxId) {
+    const fileInput = $(fileInputId), pickBtn = $(pickBtnId),
+          playBtn = $(playBtnId), nextBtn = $(nextBtnId), box = $(boxId);
+
+    pickBtn.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', (e) => {
+        if (!e.target.files.length) return;
+        deck.files = Array.from(e.target.files);
+        deck.index = 0;
+        loadSong(deck, 0);
+        playBtn.disabled = false;
+        nextBtn.disabled = deck.files.length < 2;
+    });
+
+    playBtn.addEventListener('click', async () => {
+        if (!deck.el) return;
+        await audioCtx.resume();
+        deck.playing = !deck.playing;
+        if (deck.playing) { deck.el.play(); playBtn.textContent = '⏸️'; }
+        else { deck.el.pause(); playBtn.textContent = '▶️'; }
+    });
+
+    nextBtn.addEventListener('click', async () => {
+        if (!deck.files.length) return;
+        loadSong(deck, (deck.index + 1) % deck.files.length);
+        await audioCtx.resume();
+        deck.el.play();
+        deck.playing = true;
+        playBtn.textContent = '⏸️';
+    });
+}
+
+function loadSong(deck, i) {
+    deck.index = i;
+    const file = deck.files[i];
+    if (!file) return;
+
+    if (!deck.el) {
+        deck.el = new Audio();
+        const src = audioCtx.createMediaElementSource(deck.el);
+        deck.gainNode = audioCtx.createGain();      // volumen hacia el aire
+        deck.localGain = audioCtx.createGain();     // volumen para vos
+        src.connect(deck.gainNode);
+        deck.gainNode.connect(mixDest);             // → en vivo
+        src.connect(deck.localGain);
+        deck.localGain.connect(audioCtx.destination);// → tus auriculares/parlante
+        applyCrossfade();
+        deck.el.addEventListener('ended', () => {
+            if (deck.files.length > 1) { loadSong(deck, (deck.index + 1) % deck.files.length); deck.el.play(); }
+            else { deck.playing = false; $(deck.playBtnId).textContent = '▶️'; }
+        });
+    }
+    deck.el.src = URL.createObjectURL(file);
+    $('box' + deck.letter).innerHTML =
+        `<span class="song-name">🎵 ${file.name}</span><br>${i+1} de ${deck.files.length}`;
+}
+
+setupDeck(deckA, 'fileInputA', 'pickBtnA', 'playBtnA', 'nextBtnA', 'boxA');
+setupDeck(deckB, 'fileInputB', 'pickBtnB', 'playBtnB', 'nextBtnB', 'boxB');
+
+// ---- CROSSFADER A ⇄ B ----
+function applyCrossfade() {
+    const x = parseFloat($('xfader').value);
+    const gA = Math.cos((x + 1) * Math.PI / 4);
+    const gB = Math.sin((x + 1) * Math.PI / 4);
+    if (deckA.gainNode) { deckA.gainNode.gain.value = gA; deckA.localGain.gain.value = gA; }
+    if (deckB.gainNode) { deckB.gainNode.gain.value = gB; deckB.localGain.gain.value = gB; }
+}
+$('xfader').addEventListener('input', applyCrossfade);
+
+$('stopBroadcastBtn').addEventListener('click', () => location.reload());
+
+// ============================================================
+//  WEBRTC (la voz y la música viajan acá, en tiempo real)
+// ============================================================
+function createPeer(remoteId, initiator) {
+    const old = peers.get(remoteId);
+    if (old) old.close();
+
+    const pc = new RTCPeerConnection(rtcConfig);
+    peers.set(remoteId, pc);
+
+    // La pista del mezclador SIEMPRE existe: el oyente se engancha ahora
+    // y escucha todo lo que pase por la consola, al instante.
+    if (myRole === 'broadcaster') {
+        const track = mixDest.stream.getAudioTracks()[0];
+        pc.addTrack(track, mixDest.stream);
+    }
+
+    pc.ontrack = (event) => {
+        $('remoteAudio').srcObject = event.streams[0];
+        if (myRole === 'listener') markLive();   // llegó el audio del locutor
+    };
+
+    pc.onicecandidate = (e) => {
+        if (e.candidate) sendSignal(remoteId, { candidate: e.candidate });
+    };
+
+    pc.onconnectionstatechange = () => {
+        if (['failed','disconnected','closed'].includes(pc.connectionState)) {
+            pc.close(); peers.delete(remoteId);
+            if (myRole === 'broadcaster') updateListenersCount();
+        }
+    };
+
+    if (initiator) {
+        pc.createOffer()
+            .then(o => pc.setLocalDescription(o))
+            .then(() => sendSignal(remoteId, { sdp: pc.localDescription }))
+            .catch(err => console.error(err));
+    }
+    return pc;
+}
+
+async function handleSignal(fromId, data) {
+    let pc = peers.get(fromId);
+    if (!pc && data.sdp && data.sdp.type === 'offer') {
+        pc = createPeer(fromId, false);
+    }
+    if (!pc) return;
+    try {
+        if (data.sdp) {
+            if (pc.signalingState !== 'stable' && data.sdp.type === 'offer') {
+                await pc.setLocalDescription({ type: 'rollback' });
+            }
+            await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+            if (data.sdp.type === 'offer') {
+                const ans = await pc.createAnswer();
+                await pc.setLocalDescription(ans);
+                sendSignal(fromId, { sdp: pc.localDescription });
+            }
+        } else if (data.candidate) {
+            await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+    } catch (err) { console.error('Error de señal:', err); }
+}
+
+// Entrar como oyente apenas carga la pagina
+joinAsListener();
+</script>
+</body>
+</html>
